@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Opinions and argument: a short study</h1>
+<p class="muted">Session 1 of 3 &middot; about 45 minutes</p>
+<div class="card">
+  <p>You will answer some questions about yourself, then have a conversation
+  about a contested policy question with someone who takes the other side.</p>
+  <form method="post" action="/start">
+    <div class="field">
+      <label class="q" for="code">Your participant ID</label>
+      <input id="code" name="code" required autocomplete="off"
+             style="width:100%;padding:11px;font:inherit;border:1px solid var(--line);border-radius:8px">
+    </div>
+    <button class="primary" type="submit">Begin</button>
+  </form>
+</div>
+{% endblock %}

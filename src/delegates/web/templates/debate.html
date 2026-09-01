@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="prop">
+  <strong>The question</strong>
+  {{ topic.proposition }}
+</div>
+{% if topic.background %}
+<details class="card" style="padding:14px 18px">
+  <summary style="cursor:pointer">Background</summary>
+  <p style="margin-top:10px">{{ topic.background }}</p>
+</details>
+{% endif %}
+<div id="inner">{% include "_inner.html" %}</div>
+{% endblock %}

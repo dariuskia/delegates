@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>About you</h1>
+<p class="muted">These answers are collected before the conversation and are
+never shown to the person you will be talking with.</p>
+<div class="card">
+  <form method="post" action="/profile">
+    {% for key, label, options in fields %}
+    <div class="field">
+      <label class="q">{{ label }}</label>
+      <div class="opts">
+        {% for opt in options %}
+        <label><input type="radio" name="{{ key }}" value="{{ opt }}" required>{{ opt }}</label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    <div class="field">
+      <label class="q" for="mind_change">Tell us about a time you changed your
+        mind about something that mattered to you. What changed it?</label>
+      <textarea id="mind_change" name="mind_change" required></textarea>
+    </div>
+    <button class="primary" type="submit">Continue</button>
+  </form>
+</div>
+{% endblock %}

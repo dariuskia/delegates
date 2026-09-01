@@ -1,0 +1,26 @@
+<form id="rating-form" data-swap method="post" action="/debate/rating">
+  <label class="q">{{ prompt }}</label>
+  <div class="scale">
+    {% for n in range(0, 11) %}
+      <button type="button" data-pos="{{ n }}">{{ n }}</button>
+    {% endfor %}
+  </div>
+  <div class="ends">
+    <span>0 &mdash; {{ topic.scale_low_label }}</span>
+    <span>{{ topic.scale_high_label }} &mdash; 10</span>
+  </div>
+
+  <div class="conf-row" style="margin-top:20px">
+    <label class="q">How sure are you?</label>
+    <div class="scale">
+      {% for value, label in confidence_levels %}
+        <button type="button" data-conf="{{ value }}">{{ label }}</button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <input type="hidden" name="position" value="">
+  <input type="hidden" name="confidence" value="">
+  <input type="hidden" name="after_turn_idx" value="{{ idx }}">
+  <input type="hidden" name="ms_elapsed" value="0">
+</form>

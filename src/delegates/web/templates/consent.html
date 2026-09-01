@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Before you start</h1>
+<div class="card">
+  <p>This study looks at how people argue about contested policy questions, and
+  at how well an AI system can represent a person's views.</p>
+  <h2>What happens</h2>
+  <ul class="plain">
+    <li>You answer questions about yourself and your general outlook (~15 min).</li>
+    <li>You have a conversation about one policy question with an AI that argues
+        the other side, marking where you stand after each exchange (~30 min).</li>
+    <li>You are invited back twice over the following weeks for two shorter
+        sessions, each paid separately.</li>
+  </ul>
+  <h2>Your data</h2>
+  <ul class="plain">
+    <li>Your answers and the conversation are recorded and stored under your
+        participant ID, not your name.</li>
+    <li>You can stop at any point and still be paid for the time you gave.</li>
+  </ul>
+  <form method="post" action="/consent">
+    <div class="field">
+      <label><input type="checkbox" name="recontact" checked> I agree to be
+        contacted about the two later sessions.</label><br>
+      <label><input type="checkbox" name="release"> I agree that a
+        de-identified version of my answers may be published for research use.</label>
+    </div>
+    <input type="hidden" name="agree" value="yes">
+    <button class="primary" type="submit">I agree, continue</button>
+  </form>
+</div>
+{% endblock %}

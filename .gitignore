@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/*.db
+data/*.db-*
+data/exports/
+.pytest_cache/
+_to_delete/
+.envrc.local

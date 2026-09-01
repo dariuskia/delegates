@@ -1,0 +1,45 @@
+{% if turns %}
+<div class="progress">Exchange {{ [exchange, n_exchanges] | min }} of {{ n_exchanges }}</div>
+{% endif %}
+
+{% for t in turns %}
+  <div class="turn {{ 'them' if t.speaker == 'interlocutor' else 'me' }}">
+    <div class="who">{{ 'The other side' if t.speaker == 'interlocutor' else 'You' }}</div>
+    <div class="bubble">{{ t.content }}</div>
+  </div>
+{% endfor %}
+
+<div id="stage" class="card">
+{% if stage == 'opening_rating' %}
+  {% set prompt = 'Before you start: where do you stand on this right now?' %}
+  {% set idx = -1 %}
+  {% include "_rating.html" %}
+
+{% elif stage == 'rating' %}
+  {% set prompt = 'Where do you stand now?' %}
+  {% set idx = last_self_idx %}
+  {% include "_rating.html" %}
+
+{% elif stage == 'await_interlocutor' %}
+  <div class="thinking" data-advance="/debate/advance">The other side is writing&hellip;</div>
+
+{% elif stage == 'reply' %}
+  <form id="reply-form" data-swap method="post" action="/debate/reply">
+    <label class="q" for="content">Your response</label>
+    <textarea id="content" name="content" data-autofocus required
+      minlength="{{ min_chars }}" maxlength="{{ max_chars }}"
+      placeholder="Answer them in your own words."></textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+      <span class="muted" id="charcount"></span>
+      <button class="primary" type="submit">Send</button>
+    </div>
+    <input type="hidden" name="ms_elapsed" value="0">
+  </form>
+
+{% elif stage == 'complete' %}
+  <p>That is the end of the conversation. Thank you &mdash; your responses are saved.</p>
+  <form method="post" action="/debate/finish">
+    <button class="primary" type="submit">Finish this session</button>
+  </form>
+{% endif %}
+</div>
