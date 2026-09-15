@@ -90,7 +90,7 @@ CONSTRAINT_POOL = ("strong_evidence", "confident_empty", "weak_hedged", "strong_
 
 # ------------------------------------------------------------------ ratings
 
-POSITION_MIN, POSITION_MAX = 0, 10
+POSITION_MIN, POSITION_MAX = 1, 7
 CONFIDENCE_LEVELS = [
     (1, "Not at all sure"),
     (2, "Slightly sure"),

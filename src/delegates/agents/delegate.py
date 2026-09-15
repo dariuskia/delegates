@@ -32,6 +32,7 @@ VARIANT_SUFFIX = {
 
 class Delegate(Agent):
     self_speaker = "delegate"
+    own_speakers = ("principal", "delegate")
 
     def system_prompt(self, scene: Scene, **kw: Any) -> str:
         profile = kw.get("profile")

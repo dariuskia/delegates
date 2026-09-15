@@ -19,6 +19,7 @@ STANCE_TEXT = {
 
 class Interlocutor(Agent):
     self_speaker = "interlocutor"
+    own_speakers = ("interlocutor",)
 
     def system_prompt(self, scene: Scene, **kw: Any) -> str:
         stance = kw.get("stance", "against")

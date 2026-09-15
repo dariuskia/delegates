@@ -28,6 +28,7 @@ from typing import Any, Literal, Sequence
 from ..llm.openrouter import Completion, ModelSpec, OpenRouter
 
 PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
+RATING_PREFILL = '{"position":'
 
 Speaker = Literal["interlocutor", "principal", "delegate"]
 ContextPolicy = Literal["full", "opponent_only", "none"]
@@ -80,6 +81,10 @@ class Agent:
     """Base: build a system prompt, render the visible history, speak."""
 
     self_speaker: Speaker = "delegate"
+    # Speakers rendered on the assistant side. A delegate standing in for a
+    # principal must read the principal's earlier replies as its own turns, or
+    # in full replay it would take the person's words for more opponent text.
+    own_speakers: tuple[Speaker, ...] = ("delegate",)
 
     def __init__(self, cfg: AgentConfig, client: OpenRouter | None = None):
         self.cfg = cfg
@@ -104,7 +109,7 @@ class Agent:
     def render_history(self, scene: Scene) -> list[dict[str, str]]:
         messages: list[dict[str, str]] = []
         for turn in self.visible(scene):
-            role = "assistant" if turn.speaker == self.self_speaker else "user"
+            role = "assistant" if turn.speaker in self.own_speakers else "user"
             if messages and messages[-1]["role"] == role:
                 messages[-1]["content"] += "\n\n" + turn.content
             else:
@@ -169,23 +174,34 @@ class Agent:
             high_label=scene.high_label,
         )
         spec = ModelSpec(
-            model=self.cfg.spec.model, temperature=0.0, max_tokens=60,
+            model=self.cfg.spec.model, temperature=0.0, max_tokens=200,
             seed=self.cfg.spec.seed,
         )
+        # Prefill the opening of the JSON object. Without it the model tends
+        # to reason aloud first and run out of tokens before the number.
         out = await self.client.complete(
             spec,
-            [{"role": "user", "content": prompt}],
+            [
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": RATING_PREFILL},
+            ],
             conn=conn,
             purpose="rating",
             debate_id=debate_id,
             agent_config_id=self.cfg.id,
         )
-        pos, conf = parse_rating(out.content)
-        return pos, conf, out.content
+        text = out.content
+        if not text.lstrip().startswith("{"):
+            text = RATING_PREFILL + text
+        pos, conf = parse_rating(text)
+        return pos, conf, text
 
 
 def parse_rating(text: str) -> tuple[float | None, int | None]:
-    match = re.search(r"\{.*\}", text, re.S)
+    """JSON object first; otherwise only an explicit `position: N`. A bare
+    number elsewhere in the text is not accepted - a list item like
+    "1. They started..." must not become a rating of 1."""
+    match = re.search(r"\{.*?\}", text, re.S)
     if match:
         try:
             data = json.loads(match.group(0))
@@ -194,7 +210,9 @@ def parse_rating(text: str) -> tuple[float | None, int | None]:
             return max(0.0, min(10.0, pos)), conf
         except (ValueError, KeyError, TypeError):
             pass
-    nums = re.findall(r"\d+(?:\.\d+)?", text)
-    if nums:
-        return max(0.0, min(10.0, float(nums[0]))), None
+    pos_m = re.search(r"position\W{0,4}(\d+(?:\.\d+)?)", text, re.I)
+    if pos_m:
+        conf_m = re.search(r"confidence\W{0,4}(\d)", text, re.I)
+        return (max(0.0, min(10.0, float(pos_m.group(1)))),
+                int(conf_m.group(1)) if conf_m else None)
     return None, None

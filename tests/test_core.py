@@ -50,6 +50,24 @@ def test_stance_opposes_the_participant():
 
 def test_rating_parser():
     assert parse_rating('{"position": 7.5, "confidence": 3}') == (7.5, 3)
-    assert parse_rating("about 4 out of 10")[0] == 4.0
+    assert parse_rating("position: 4, confidence: 2") == (4.0, 2)
+    assert parse_rating("about 4 out of 10") == (None, None)
+    assert parse_rating("1. They started supporting rent control") == (None, None)
+    assert parse_rating('```json\n{"position": 3, "confidence": 2}\n```') == (3.0, 2)
     assert parse_rating('{"position": 99, "confidence": 2}')[0] == 10.0
     assert parse_rating("no numbers here") == (None, None)
+
+
+def test_delegate_renders_principal_replies_as_its_own_side():
+    from delegates.agents.delegate import Delegate
+
+    msgs = Delegate(cfg("full")).render_history(SCENE)
+    assert [m["role"] for m in msgs] == ["user", "assistant", "user"]
+    assert msgs[1]["content"] == "B"
+
+
+def test_interlocutor_renders_principal_replies_as_user():
+    from delegates.agents.interlocutor import Interlocutor
+
+    msgs = Interlocutor(cfg("full")).render_history(SCENE)
+    assert [m["role"] for m in msgs] == ["assistant", "user", "assistant"]
