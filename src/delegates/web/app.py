@@ -22,8 +22,9 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from .. import study
+from ..agents.base import Turn
 from ..config import CONFIDENCE_LEVELS, MAX_REPLY_CHARS, MIN_REPLY_CHARS, SECRET
-from ..db import connect, init_db, insert, js, one, unjs
+from ..db import all_rows, connect, init_db, insert, js, one, unjs
 
 HERE = Path(__file__).resolve().parent
 
@@ -103,6 +104,8 @@ def resume(request: Request, token: str):
     request.session["session_no"] = session_no
     if session_no == 1:
         return RedirectResponse("/consent", status_code=303)
+    if session_no == 3:
+        return RedirectResponse("/authorize", status_code=303)
     return RedirectResponse("/not-yet", status_code=303)
 
 
@@ -364,3 +367,206 @@ def done(request: Request):
 @app.get("/healthz")
 def healthz():
     return {"ok": True, "ts": time.time()}
+
+
+# ---------------------------------------------------------------- authorize
+# Session 3. Items are built on first entry and served one at a time; the
+# server re-derives the next unanswered item on every request, as in Session 1.
+
+def _authorize_context(conn, request: Request, participant):
+    items = study.build_review_items(conn, participant)
+    item = study.next_review_item(conn, participant["id"])
+    done = one(conn, "SELECT COUNT(*) AS n FROM authorizations a JOIN review_items r "
+                     "ON r.id = a.review_item_id WHERE r.participant_id = ?",
+               (participant["id"],))["n"]
+    ctx = {"request": request, "participant": participant, "n_items": len(items),
+           "n_done": done, "item": None}
+    if item:
+        ctx.update(study.review_item_context(conn, item))
+    return ctx
+
+
+@app.get("/authorize", response_class=HTMLResponse)
+def authorize_page(request: Request):
+    participant = require_participant(request)
+    conn = db()
+    try:
+        conn.execute("BEGIN")
+        ctx = _authorize_context(conn, request, participant)
+        conn.execute("COMMIT")
+    finally:
+        conn.close()
+    return render("authorize.html", ctx)
+
+
+@app.post("/authorize/verdict", response_class=HTMLResponse)
+def authorize_verdict(
+    request: Request, review_item_id: int = Form(...), verdict: str = Form(...),
+    comment: str = Form(""), ms_elapsed: int = Form(0),
+):
+    participant = require_participant(request)
+    conn = db()
+    try:
+        conn.execute("BEGIN")
+        owner = one(conn, "SELECT participant_id FROM review_items WHERE id = ?",
+                    (review_item_id,))
+        if owner and owner["participant_id"] == participant["id"]:
+            study.record_authorization(conn, review_item_id, verdict, comment, ms_elapsed)
+        ctx = _authorize_context(conn, request, participant)
+        conn.execute("COMMIT")
+    finally:
+        conn.close()
+    return render("_authorize_inner.html", ctx)
+
+
+@app.post("/authorize/finish")
+def authorize_finish(request: Request):
+    participant = require_participant(request)
+    conn = db()
+    try:
+        conn.execute("BEGIN")
+        conn.execute(
+            "UPDATE study_sessions SET status='complete', completed_at=datetime('now') "
+            "WHERE participant_id=? AND session_no=3", (participant["id"],),
+        )
+        study.log_event(conn, "session3_complete", participant_id=participant["id"])
+        conn.execute("COMMIT")
+    finally:
+        conn.close()
+    return RedirectResponse("/done", status_code=303)
+
+
+# ------------------------------------------------------------------- review
+# Researcher-facing, read-only. Lists every debate and shows a transcript; for
+# a delegate replay each exchange is shown beside the principal turn it stood
+# in for (the `source_turn_id` join) with both sides' ratings. No auth: this is
+# a local research tool, do not expose it on a participant-facing host.
+
+
+def _ratings_by_idx(conn, debate_id: int, source: str) -> dict[int, dict]:
+    return {
+        r["after_turn_idx"]: dict(r)
+        for r in all_rows(
+            conn, "SELECT * FROM ratings WHERE debate_id=? AND source=?",
+            (debate_id, source),
+        )
+    }
+
+
+@app.get("/review", response_class=HTMLResponse)
+def review_index(request: Request):
+    conn = db()
+    try:
+        rows = all_rows(conn, """
+            SELECT d.*, p.code, t.title,
+                   c.name AS cfg_name, c.profile_kind, c.context_policy, c.prompt_variant,
+                   (SELECT COUNT(*) FROM turns WHERE debate_id=d.id) AS n_turns,
+                   (SELECT COUNT(*) FROM ratings WHERE debate_id=d.id) AS n_ratings,
+                   (SELECT ROUND(SUM(cost_usd), 3) FROM model_calls WHERE debate_id=d.id) AS cost
+            FROM debates d
+            JOIN participants p ON p.id = d.participant_id
+            JOIN topics t ON t.id = d.topic_id
+            LEFT JOIN agent_configs c ON c.id = d.delegate_cfg_id
+            ORDER BY COALESCE(d.source_debate_id, d.id), d.actor DESC, d.id
+        """)
+    finally:
+        conn.close()
+    groups: dict[int, list] = {}
+    for r in rows:
+        groups.setdefault(r["source_debate_id"] or r["id"], []).append(r)
+    return render("review_index.html", {"request": request, "groups": groups})
+
+
+@app.get("/review/{debate_id}", response_class=HTMLResponse)
+def review_debate(request: Request, debate_id: int):
+    conn = db()
+    try:
+        debate = one(conn, "SELECT * FROM debates WHERE id=?", (debate_id,))
+        if not debate:
+            raise HTTPException(404, "No such debate")
+        topic = study.topic_of(conn, debate)
+        participant = one(conn, "SELECT * FROM participants WHERE id=?",
+                          (debate["participant_id"],))
+        cfg = one(conn, "SELECT * FROM agent_configs WHERE id=?",
+                  (debate["delegate_cfg_id"],)) if debate["delegate_cfg_id"] else None
+        profile = one(conn, "SELECT * FROM profiles WHERE id=?",
+                      (debate["profile_id"],)) if debate["profile_id"] else None
+        turns = study.transcript(conn, debate_id)
+        own_ratings = _ratings_by_idx(
+            conn, debate_id,
+            "participant" if debate["actor"] == "principal" else "agent_reported",
+        )
+        source_turns: dict[int, Turn] = {}
+        source_ratings: dict[int, dict] = {}
+        if debate["source_debate_id"]:
+            source_turns = {t.id: t for t in study.transcript(conn, debate["source_debate_id"])}
+            source_ratings = _ratings_by_idx(conn, debate["source_debate_id"], "participant")
+        siblings = all_rows(conn, """
+            SELECT d.id, d.mode, d.run_index, c.name AS cfg_name
+            FROM debates d LEFT JOIN agent_configs c ON c.id = d.delegate_cfg_id
+            WHERE d.id = ? OR d.source_debate_id = ? OR d.id = ?
+            ORDER BY d.actor DESC, d.id
+        """, (debate["source_debate_id"] or debate_id, debate["source_debate_id"] or debate_id,
+              debate["source_debate_id"] or debate_id))
+    finally:
+        conn.close()
+
+    # Group into exchanges: one interlocutor turn followed by the reply.
+    exchanges, cur = [], None
+    for t in turns:
+        if t.speaker == "interlocutor":
+            cur = {"opp": t, "own": None, "src": None}
+            exchanges.append(cur)
+        elif cur is not None:
+            cur["own"] = t
+            cur["src"] = source_turns.get(t.source_turn_id)
+    return render("review_debate.html", {
+        "request": request, "debate": debate, "topic": topic, "participant": participant,
+        "cfg": cfg, "profile": profile, "exchanges": exchanges,
+        "own_ratings": own_ratings, "source_ratings": source_ratings,
+        "opening": own_ratings.get(study.OPENING_RATING_IDX),
+        "source_opening": source_ratings.get(study.OPENING_RATING_IDX),
+        "plan": unjs(debate["plan_json"], {}) or {}, "siblings": siblings,
+        "is_replay": bool(debate["source_debate_id"]),
+    })
+
+
+@app.get("/review/authorizations/{participant_id}", response_class=HTMLResponse)
+def review_authorizations(request: Request, participant_id: int):
+    conn = db()
+    try:
+        participant = one(conn, "SELECT * FROM participants WHERE id=?", (participant_id,))
+        if not participant:
+            raise HTTPException(404, "No such participant")
+        rows = all_rows(conn, """
+            SELECT r.order_idx, r.kind, r.shown_position_delta, r.turn_id,
+                   a.verdict, a.comment, a.ms_elapsed,
+                   t.debate_id, t.idx AS turn_idx, substr(t.content, 1, 160) AS excerpt,
+                   c.name AS cfg_name
+            FROM review_items r
+            LEFT JOIN authorizations a ON a.review_item_id = r.id
+            JOIN turns t ON t.id = r.turn_id
+            JOIN debates d ON d.id = t.debate_id
+            LEFT JOIN agent_configs c ON c.id = d.delegate_cfg_id
+            WHERE r.participant_id = ? ORDER BY r.order_idx
+        """, (participant_id,))
+        summary = all_rows(conn, """
+            SELECT r.kind, a.verdict, COUNT(*) AS n
+            FROM review_items r JOIN authorizations a ON a.review_item_id = r.id
+            WHERE r.participant_id = ? GROUP BY r.kind, a.verdict
+        """, (participant_id,))
+        repeats = all_rows(conn, """
+            SELECT r.turn_id, GROUP_CONCAT(a.verdict, ' / ') AS verdicts
+            FROM review_items r JOIN authorizations a ON a.review_item_id = r.id
+            WHERE r.participant_id = ? AND r.kind IN ('own', 'repeat')
+            GROUP BY r.turn_id HAVING COUNT(*) > 1
+        """, (participant_id,))
+    finally:
+        conn.close()
+    table: dict[str, dict[str, int]] = {}
+    for s in summary:
+        table.setdefault(s["kind"], {})[s["verdict"]] = s["n"]
+    return render("review_authorizations.html", {
+        "request": request, "participant": participant, "rows": rows,
+        "table": table, "repeats": repeats,
+    })

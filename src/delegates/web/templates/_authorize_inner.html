@@ -1,0 +1,49 @@
+{% if item %}
+<div class="progress">Reply {{ n_done + 1 }} of {{ n_items }}</div>
+<div class="turn them">
+  <div class="who">The other side said</div>
+  <div class="bubble">{{ prompt.content if prompt else '(opening)' }}</div>
+</div>
+<div class="turn me">
+  <div class="who">Said on your behalf</div>
+  <div class="bubble">{{ turn.content }}</div>
+</div>
+{% if before is not none and after is not none %}
+<p class="muted">After this reply, the position reported on your behalf
+  {% if after == before %}stayed at <strong>{{ before | round(0) | int }}</strong>
+  {% else %}moved from <strong>{{ before | round(0) | int }}</strong> to <strong>{{ after | round(0) | int }}</strong>{% endif %}
+  on the 0&ndash;10 scale.</p>
+{% endif %}
+<div id="stage" class="card">
+  <form id="verdict-form" data-swap method="post" action="/authorize/verdict">
+    <input type="hidden" name="review_item_id" value="{{ item.id }}">
+    <input type="hidden" name="ms_elapsed" value="0">
+    <label class="q">Would you have authorised this reply?</label>
+    <input type="hidden" name="verdict" value="">
+    <div class="scale verdicts">
+      <button type="button" data-verdict="yes">Yes</button>
+      <button type="button" data-verdict="reservations">Yes, with reservations</button>
+      <button type="button" data-verdict="no">No</button>
+    </div>
+    <label class="muted" for="comment" style="display:block;margin-top:14px">Optional: what is off, or what is right?</label>
+    <textarea id="comment" name="comment" style="min-height:70px" placeholder="A few words is plenty."></textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px">
+      <button class="primary" type="submit" disabled>Submit</button>
+    </div>
+  </form>
+</div>
+{% else %}
+<div id="stage" class="card">
+  <p>That is all {{ n_items }} replies. Thank you &mdash; your answers are saved.</p>
+  <form method="post" action="/authorize/finish">
+    <button class="primary" type="submit">Finish this session</button>
+  </form>
+</div>
+{% endif %}
+<style>
+  .verdicts button { padding: 11px 8px; }
+  .verdicts button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button[disabled] { opacity: .45; cursor: not-allowed; }
+  .verdicts button[value=yes]:hover { background: #e3f3e6; }
+  .verdicts button[value=no]:hover { background: #fbe4e1; }
+</style>

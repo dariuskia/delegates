@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Review{% endblock %}
+{% block body %}
+<h1>Would you have said this?</h1>
+<p class="muted">Session 3 of 3 &middot; about 15 minutes</p>
+<div class="card">
+  <p>An AI was asked to stand in for you in the conversation you had earlier,
+  replying to the other side in your place. Below, one reply at a time, you will
+  see what the other side said and what was said back <em>on your behalf</em>.</p>
+  <p>For each one, tell us whether you would have authorised it: would you be
+  content for this to have gone out under your name?</p>
+</div>
+<div id="inner">{% include "_authorize_inner.html" %}</div>
+{% endblock %}

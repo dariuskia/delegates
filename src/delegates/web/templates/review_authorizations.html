@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Authorizations{% endblock %}
+{% block body %}
+<p class="muted"><a href="/review">&larr; all debates</a></p>
+<h1>Authorizations &middot; {{ participant.code }}</h1>
+
+<div class="card">
+  <h2 style="margin-top:0">Verdicts by provenance</h2>
+  {% if table %}
+  <table>
+    <tr><th>kind</th><th>yes</th><th>reservations</th><th>no</th></tr>
+    {% for kind, v in table.items() %}
+    <tr><td>{{ kind }}</td><td>{{ v.get('yes', 0) }}</td><td>{{ v.get('reservations', 0) }}</td><td>{{ v.get('no', 0) }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">No verdicts yet.</p>{% endif %}
+  {% if repeats %}
+  <h2>Repeat consistency</h2>
+  <ul class="plain">{% for r in repeats %}<li>turn {{ r.turn_id }}: {{ r.verdicts }}</li>{% endfor %}</ul>
+  {% endif %}
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>#</th><th>kind</th><th>source</th><th>Δ shown</th><th>verdict</th><th>ms</th><th>comment</th><th>excerpt</th></tr>
+    {% for r in rows %}
+    <tr class="{{ r.verdict or 'pending' }}">
+      <td>{{ r.order_idx }}</td>
+      <td>{{ r.kind }}</td>
+      <td><a href="/review/{{ r.debate_id }}">#{{ r.debate_id }}</a> t{{ r.turn_idx }}<br>
+          <span class="muted">{{ r.cfg_name.split('::')[1] ~ '/' ~ r.cfg_name.split('::')[2] if r.cfg_name }}</span></td>
+      <td>{{ '%+.0f' % r.shown_position_delta if r.shown_position_delta is not none else '–' }}</td>
+      <td>{{ r.verdict or '–' }}</td>
+      <td>{{ r.ms_elapsed or '' }}</td>
+      <td>{{ r.comment or '' }}</td>
+      <td class="muted">{{ r.excerpt }}&hellip;</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+<style>
+  .wrap { max-width: 1100px; }
+  a { color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  tr.yes td:nth-child(5) { color: #1d7a3a; font-weight: 600; }
+  tr.no td:nth-child(5) { color: #a3261a; font-weight: 600; }
+  tr.reservations td:nth-child(5) { color: #9a6a00; font-weight: 600; }
+</style>
+{% endblock %}

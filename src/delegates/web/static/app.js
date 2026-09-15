@@ -59,6 +59,26 @@
       });
     }
 
+    // Verdict: pick an option (selects, enables Submit), optionally comment,
+    // then Submit posts. The form has data-swap so submit goes through post().
+    const verdict = document.getElementById("verdict-form");
+    if (verdict && !verdict.dataset.verdictWired) {
+      verdict.dataset.verdictWired = "1";
+      const submit = verdict.querySelector("button[type=submit]");
+      verdict.querySelectorAll("[data-verdict]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          verdict.querySelectorAll("[data-verdict]").forEach((b) => b.classList.remove("on"));
+          btn.classList.add("on");
+          verdict.querySelector("input[name=verdict]").value = btn.dataset.verdict;
+          submit.disabled = false;
+        });
+      });
+      verdict.addEventListener("submit", (e) => {
+        if (verdict.querySelector("input[name=verdict]").value === "") e.stopImmediatePropagation();
+      }, true);
+    }
+
     const box = document.querySelector("textarea[name=content]");
     if (box && !box.dataset.wired) {
       box.dataset.wired = "1";

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Debate #{{ debate.id }}{% endblock %}
+{% block body %}
+<p class="muted"><a href="/review">&larr; all debates</a></p>
+<h1>Debate #{{ debate.id }} &middot; {{ debate.actor }} / {{ debate.mode }}</h1>
+<p class="muted">
+  {{ participant.code }} &middot; {{ topic.title }} &middot; {{ debate.status }}
+  {% if debate.frozen_at %}&middot; frozen {{ debate.frozen_at }}{% endif %}
+  {% if is_replay %}&middot; replay of <a href="/review/{{ debate.source_debate_id }}">#{{ debate.source_debate_id }}</a>{% endif %}
+</p>
+
+<div class="tabs">
+  {% for s in siblings %}
+    <a class="{{ 'on' if s.id == debate.id }}" href="/review/{{ s.id }}">#{{ s.id }}
+      {{ 'principal' if not s.cfg_name else s.cfg_name.split('::')[1] ~ '/' ~ s.cfg_name.split('::')[2] ~ ' r' ~ s.run_index }}</a>
+  {% endfor %}
+</div>
+
+<div class="prop"><strong>Proposition</strong>{{ topic.proposition }}</div>
+
+{% if cfg %}
+<details class="card"><summary>Delegate config: {{ cfg.name }}</summary>
+  <p class="muted">model {{ cfg.model }} &middot; profile {{ cfg.profile_kind }} &middot; context {{ cfg.context_policy }}
+    &middot; prompt {{ cfg.prompt_variant }} &middot; seed {{ debate.seed }} &middot; {{ cfg.params_json }}</p>
+  {% if profile %}<h2>Profile shown to the delegate (kind: {{ profile.kind }})</h2>
+  <div class="bubble mono">{{ profile.rendered }}</div>{% else %}<p class="muted">No profile (generic floor).</p>{% endif %}
+</details>
+{% elif plan.cells %}
+<details class="card"><summary>Plan</summary>
+  <p class="muted">seed {{ debate.seed }} &middot; stance {{ plan.stance }} &middot;
+  cells: {% for k, v in plan.cells.items() %}{{ k }}={{ v }}{{ ', ' if not loop.last }}{% endfor %}</p>
+</details>
+{% endif %}
+
+{% macro rating(r) -%}
+  {% if r %}<span class="pill">{{ r.position | round(1) }} / conf {{ r.confidence if r.confidence is not none else '?' }}</span>
+  {% else %}<span class="pill none">no rating</span>{% endif %}
+{%- endmacro %}
+
+<div class="open">
+  Opening rating:
+  {% if is_replay %}principal {{ rating(source_opening) }} &middot; delegate {{ rating(opening) }}
+  {% else %}{{ rating(opening) }}{% endif %}
+</div>
+
+{% for ex in exchanges %}
+<div class="ex">
+  <div class="turn them">
+    <div class="who">Interlocutor &middot; turn {{ ex.opp.idx }}
+      {% if ex.opp.constraint_cell and ex.opp.constraint_cell != 'free' %}<span class="cell">{{ ex.opp.constraint_cell }}</span>{% endif %}</div>
+    <div class="bubble">{{ ex.opp.content }}</div>
+  </div>
+  {% if ex.own %}
+  <div class="{{ 'cols' if is_replay else '' }}">
+    {% if is_replay %}
+    <div class="turn src">
+      <div class="who">Principal &middot; turn {{ ex.src.idx if ex.src else '?' }} &middot; {{ rating(source_ratings.get(ex.own.idx)) }}</div>
+      <div class="bubble">{{ ex.src.content if ex.src else '(source turn missing)' }}</div>
+    </div>
+    {% endif %}
+    <div class="turn me">
+      <div class="who">{{ ex.own.speaker }} &middot; turn {{ ex.own.idx }} &middot; {{ rating(own_ratings.get(ex.own.idx)) }}</div>
+      <div class="bubble">{{ ex.own.content }}</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+<style>
+  .wrap { max-width: {{ '1100px' if is_replay else '760px' }}; }
+  a { color: var(--accent); }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 18px; font-size: 13px; }
+  .tabs a { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; background: #fff; text-decoration: none; }
+  .tabs a.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ex { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 8px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .src .bubble { background: #fff7e6; }
+  .pill { display: inline-block; background: var(--accent); color: #fff; border-radius: 999px;
+          padding: 0 9px; font-size: 12px; letter-spacing: 0; text-transform: none; }
+  .pill.none { background: var(--muted); }
+  .cell { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px;
+          background: #ffe4e1; color: #8a2a1a; text-transform: none; letter-spacing: 0; }
+  .open { margin: 0 0 14px; font-size: 14px; }
+  .mono { font-size: 14px; }
+  details summary { cursor: pointer; font-weight: 600; }
+</style>
+{% endblock %}

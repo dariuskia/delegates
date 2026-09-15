@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Review{% endblock %}
+{% block body %}
+<h1>Debates</h1>
+<p class="muted">Every run through the environment, grouped by the principal debate it derives from.</p>
+{% for src_id, rows in groups.items() %}
+<div class="card">
+  {% for d in rows %}
+  <div class="row {{ 'principal' if d.actor == 'principal' else 'replay' }}">
+    <a href="/review/{{ d.id }}"><strong>#{{ d.id }}</strong></a>
+    {% if d.actor == 'principal' %}
+      <span>{{ d.code }} &middot; {{ d.title }}
+        <a class="muted" href="/review/authorizations/{{ d.participant_id }}">authorizations</a></span>
+    {% else %}
+      <span>{{ d.profile_kind }} / {{ d.context_policy }} / {{ d.prompt_variant }}
+        <span class="muted">run {{ d.run_index }}</span></span>
+    {% endif %}
+    <span class="muted right">{{ d.mode }} &middot; {{ d.status }} &middot; {{ d.n_turns }} turns
+      &middot; {{ d.n_ratings }} ratings{% if d.cost %} &middot; ${{ d.cost }}{% endif %}</span>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p>No debates yet.</p>
+{% endfor %}
+<style>
+  .row { display: flex; gap: 12px; align-items: baseline; padding: 6px 0; }
+  .row.replay { padding-left: 22px; border-top: 1px solid var(--line); }
+  .row .right { margin-left: auto; white-space: nowrap; }
+  a { color: var(--accent); }
+</style>
+{% endblock %}
